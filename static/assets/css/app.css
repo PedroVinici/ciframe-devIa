@@ -341,12 +341,19 @@ a:active {
 .btn {
   border: none;
 }
+.btn-default,
+.btn-default:link,
+.btn-default:visited {
+  color: #333;
+}
 .btn-primary,
+.btn-primary:link,
 .btn-primary:visited,
 .btn-primary:active,
 .btn-primary:hover {
   background-color: #54ACDE;
   box-shadow: none;
+  color: #FFF;
 }
 .btn-link,
 .btn-link:visited {

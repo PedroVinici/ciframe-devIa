@@ -19,6 +19,11 @@ angular.module('deciframeApp').config(function($routeProvider) {
       controller: "SequenciaController",
       controllerAs: "Sequencia"
     })
+    .when('/cadastra-seqfamosa', {
+      templateUrl: "templates/cadastra-seqfamosa.html",
+      controller: "CadastraSequenciaController",
+      controllerAs: "Cadastra"
+    })
     .when('/sobre', {
       templateUrl: "templates/about.html",
       controller: "AboutController"

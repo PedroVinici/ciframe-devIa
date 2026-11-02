@@ -14,8 +14,11 @@ estático, numa base de dados carregada de um CSV em memória (sem banco).
 
 ```
 docker build -t ciframe .
-docker run -p 8080:8080 ciframe
+docker run -p 8080:8080 -v "$(pwd)/data:/app/data" ciframe
 ```
+
+O volume em `data/` preserva o catálogo de sequências cadastradas
+(`data/sequencias.db`) entre reinícios do container.
 
 Acesse [http://localhost:8080](http://localhost:8080).
 

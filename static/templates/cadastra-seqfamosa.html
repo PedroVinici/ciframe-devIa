@@ -1,0 +1,33 @@
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-sm-6 col-md-4 viewWindow-panel viewWindow-panel-A">
+      <div class="viewWindow-panel-container">
+        <h4 class="text-center">Monte sua sequência de acordes</h4>
+        <div class="acordes-container" ng-repeat='acordesCollection in Cadastra.acordes'>
+          <df-hex acorde="{{acordeon.acorde}}" acorde-color="{{acordeon.cor}}" acorde-checked="Cadastra.temAcorde(acordeon)" ng-repeat="acordeon in acordesCollection" ng-click="Cadastra.addAcorde(acordeon)"></df-hex>
+        </div>
+        <br style="clear: both;">
+        <a href="#/porsequencia" class="btn btn-default">Voltar</a>
+      </div>
+    </div>
+    <div class="col-sm-6 col-md-8 viewWindow-panel viewWindow-panel-D">
+      <div class="viewWindow-panel-container">
+        <h4>Sua sequência</h4>
+        <p ng-show="!Cadastra.minhaSequencia.length">Clique nos acordes ao lado para montar a sequência, na ordem em que eles aparecem na música.</p>
+        <div ng-show="Cadastra.minhaSequencia.length">
+          <df-hex acorde="{{acordeon.acorde}}" acorde-color="{{acordeon.cor}}" ng-repeat="acordeon in Cadastra.minhaSequencia" ng-click="Cadastra.addAcorde(acordeon)"></df-hex>
+          <br style="clear: both;"><br>
+        </div>
+
+        <div class="alert alert-danger" ng-show="Cadastra.erro">{{Cadastra.erro}}</div>
+
+        <button class="btn btn-primary" ng-disabled="!Cadastra.minhaSequencia.length || Cadastra.salvando" ng-click="Cadastra.cadastrar()">
+          Cadastrar sequência
+        </button>
+        <button class="btn btn-default" ng-disabled="!Cadastra.minhaSequencia.length || Cadastra.salvando" ng-click="Cadastra.limpar()">
+          Limpar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

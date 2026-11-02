@@ -1,5 +1,6 @@
 # coding: utf-8
 import json
+import sqlite3
 from flask import Flask, request
 import sys
 from musica import *
@@ -97,6 +98,47 @@ for k,v in genero_musicas.items():
 
 f.close()
 
+# --- Catálogo de sequências (SQLite) ---
+DB_PATH = 'data/sequencias.db'
+
+# As 6 sequências originais, semeadas na criação da tabela (IDs fixos).
+SEQUENCIAS_ORIGINAIS = [
+    (0, ['Bm', 'G', 'D', 'A']),
+    (1, ['C', 'G', 'Am', 'F']),
+    (2, ['Em', 'G']),
+    (3, ['C', 'A7', 'Dm', 'G7']),
+    (4, ['Gm', 'F']),
+    (5, ['C', 'C7', 'F', 'Fm']),
+]
+
+
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    conn = get_db()
+    try:
+        with conn:
+            conn.execute(
+                'CREATE TABLE IF NOT EXISTS sequencias ('
+                'id INTEGER PRIMARY KEY, '
+                'acordes_json TEXT NOT NULL UNIQUE)'
+            )
+            for seq_id, acordes_seq in SEQUENCIAS_ORIGINAIS:
+                conn.execute(
+                    'INSERT OR IGNORE INTO sequencias (id, acordes_json) '
+                    'VALUES (?, ?)',
+                    (seq_id, json.dumps(acordes_seq))
+                )
+    finally:
+        conn.close()
+
+
+init_db()
+
 
 @app.route('/')
 def index():
@@ -163,6 +205,50 @@ def get_generos():
 def get_acordes():
     return json.dumps(list(acordes))
 
+@app.route('/sequencias', methods=['GET'])
+def get_sequencias():
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            'SELECT id, acordes_json FROM sequencias ORDER BY id'
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return json.dumps([
+        {'id': row['id'], 'acordes': json.loads(row['acordes_json'])}
+        for row in rows
+    ])
+
+@app.route('/sequencias', methods=['POST'])
+def criar_sequencia():
+    data = request.get_json(silent=True)
+    acordes_seq = data.get('acordes') if isinstance(data, dict) else None
+
+    if not isinstance(acordes_seq, list) or len(acordes_seq) == 0:
+        return json.dumps({'erro': 'Informe uma lista não vazia de acordes.'}), 400
+
+    if not all(isinstance(a, str) and a.strip() != '' for a in acordes_seq):
+        return json.dumps({'erro': 'Acordes inválidos.'}), 400
+
+    acordes_seq = [a.strip() for a in acordes_seq]
+    acordes_json = json.dumps(acordes_seq)
+
+    conn = get_db()
+    try:
+        with conn:
+            cur = conn.execute(
+                'INSERT INTO sequencias (acordes_json) VALUES (?)',
+                (acordes_json,)
+            )
+            novo_id = cur.lastrowid
+    except sqlite3.IntegrityError:
+        return json.dumps({'erro': 'Essa sequência já existe.'}), 409
+    finally:
+        conn.close()
+
+    return json.dumps({'id': novo_id, 'acordes': acordes_seq}), 201
+
 @app.route('/musica/<m_id>/')
 def get_musica(m_id):
     return json.dumps(musicas[m_id].__dict__)
@@ -173,6 +259,7 @@ def get_similares():
     acordes_tag = request.args.get('acordes')
     id_musica_tag = request.args.get('id_unico_musica')
     sequencia_tag = request.args.get('sequencia')
+    sequencia_id_tag = request.args.get('sequencia_id')
     pagina_tag = request.args.get('pagina','1')
 
     # se não existir, filtra por todos.
@@ -187,26 +274,92 @@ def get_similares():
     elif id_musica_tag:
         musica = musicas[id_musica_tag]
         acordes = musica.acordes
-    elif sequencia_tag:
-        acordes = sequencia_tag.replace(',','')
+    elif sequencia_id_tag or sequencia_tag:
+        id_seq = resolve_sequencia_id(sequencia_id_tag, sequencia_tag)
         similares = []
 
-        if acordes in sequencias:
-            id_seq = sequencias[acordes]
-            similares = get_pagina(get_similares_por_sequencia(id_seq, generos_key), pagina_tag)
+        if id_seq is not None:
+            similares = get_pagina(
+                get_similares_por_sequencia_custom(id_seq, generos_key),
+                pagina_tag
+            )
         return json.dumps(similares)
 
     similares = get_similares(acordes, generos_key, id_musica_tag)
 
     return json.dumps(get_pagina(similares, pagina_tag))
 
-def get_similares_por_sequencia(id_seq, generos_key):
+def resolve_sequencia_id(sequencia_id_tag, sequencia_tag):
+    if sequencia_id_tag:
+        try:
+            return int(sequencia_id_tag)
+        except (TypeError, ValueError):
+            return None
+
+    if not sequencia_tag:
+        return None
+
+    if sequencia_tag.isdigit():
+        return int(sequencia_tag)
+
+    # formato legado: lista de acordes separada por vírgula.
+    acordes_seq = [a for a in sequencia_tag.split(',') if a != '']
+    sequencia = get_sequencia_por_acordes(acordes_seq)
+    if sequencia is not None:
+        return sequencia['id']
+    return None
+
+def get_sequencia_por_id(id_seq):
+    conn = get_db()
+    try:
+        row = conn.execute(
+            'SELECT id, acordes_json FROM sequencias WHERE id = ?',
+            (id_seq,)
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if row is None:
+        return None
+    return {'id': row['id'], 'acordes': json.loads(row['acordes_json'])}
+
+def get_sequencia_por_acordes(acordes_seq):
+    conn = get_db()
+    try:
+        row = conn.execute(
+            'SELECT id, acordes_json FROM sequencias WHERE acordes_json = ?',
+            (json.dumps(acordes_seq),)
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if row is None:
+        return None
+    return {'id': row['id'], 'acordes': json.loads(row['acordes_json'])}
+
+def match_contiguo(target_chords, cifra_chords):
+    if not target_chords or len(target_chords) > len(cifra_chords):
+        return False
+
+    target_len = len(target_chords)
+    for i in range(len(cifra_chords) - target_len + 1):
+        if cifra_chords[i:i + target_len] == target_chords:
+            return True
+    return False
+
+def get_similares_por_sequencia_custom(id_seq, generos_key):
+    sequencia = get_sequencia_por_id(id_seq)
+    if sequencia is None:
+        return []
+
+    target_chords = sequencia['acordes']
+
     # filtra para melhor desempenho
     collection = apply_filtro(musicas.values(), generos_key)
 
     similares = []
     for musica in collection:
-        if str(id_seq) in musica.seqs_famosas:
+        if match_contiguo(target_chords, musica.cifra):
             similar = {
                 'id_unico_musica' : musica.id_unico_musica,
                 'id_artista' : musica.id_artista,

@@ -21,8 +21,10 @@ Docker (matches how the app actually ships):
 
 ```
 docker build -t ciframe .
-docker run -p 8080:8080 ciframe
+docker run -p 8080:8080 -v "$(pwd)/data:/app/data" ciframe
 ```
+
+O volume em `data/` preserva o catálogo de sequências (`data/sequencias.db`).
 
 Or a plain virtualenv:
 
